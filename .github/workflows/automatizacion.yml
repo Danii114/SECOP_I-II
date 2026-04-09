@@ -1,0 +1,49 @@
+name: SECOP I-II
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'  # lunes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar-secops:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clonar repo
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      # 2. Python
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. Librerías
+      - name: 📦 Instalar dependencias
+        run: |
+          pip install pandas requests pyarrow
+
+      # 🔵 4. SECOP I (TUYO)
+      - name: 🔵 Actualizar SECOP I
+        run: python scripts/actualizacion_datos.py
+
+      # 🟢 5. SECOP II (COMPAÑERO)
+      - name: 🟢 Actualizar SECOP II
+        run: python scripts/actualizar_secop2.py
+
+      # 6. Subir cambios
+      - name: 💾 Guardar cambios
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          
+          git add .
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
+          
+          git commit -m "🔄 Actualización SECOP I + II"
+          git push
