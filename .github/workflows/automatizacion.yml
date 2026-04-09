@@ -30,11 +30,11 @@ jobs:
 
       # 🔵 4. SECOP I (TUYO)
       - name: 🔵 Actualizar SECOP I
-        run: python scripts/actualizacion_datos.py
+        run: python scripts/descarga_datos.py
 
       # 🟢 5. SECOP II (COMPAÑERO)
       - name: 🟢 Actualizar SECOP II
-        run: python scripts/actualizar_secop2.py
+        run: python scripts/descarga_datos_II.py
 
       # 6. Subir cambios
       - name: 💾 Guardar cambios
