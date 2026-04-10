@@ -8,18 +8,19 @@ import os
 # =====================================================
 
 URL = "https://www.datos.gov.co/resource/f789-7hwg.json"
-ARCHIVO = "data/secop_2026-04.parquet"
+ARCHIVO = "data/secop.parquet"
 
 # =====================================================
-# 🔹 1. FECHA ÚLTIMA SEMANA
+# 🔹 1. FECHA (AYER)
 # =====================================================
 
 hoy = datetime.today()
-hace_una_semana = hoy - timedelta(days=7)
+ayer = hoy - timedelta(days=1)
 
-fecha_inicio = hace_una_semana.strftime('%Y-%m-%dT%H:%M:%S')
+fecha_inicio = ayer.strftime('%Y-%m-%dT00:00:00')
+fecha_fin = ayer.strftime('%Y-%m-%dT23:59:59')
 
-print(f"📅 Descargando desde última semana: {fecha_inicio}")
+print(f"📅 Descargando: {fecha_inicio} → {fecha_fin}")
 
 # =====================================================
 # 🔹 2. DESCARGA CON PAGINACIÓN
@@ -31,7 +32,7 @@ all_data = []
 
 while True:
     params = {
-        "$where": f"fecha_de_cargue_en_el_secop >= '{fecha_inicio}'",
+        "$where": f"fecha_de_cargue_en_el_secop BETWEEN '{fecha_inicio}' AND '{fecha_fin}'",
         "$limit": limit,
         "$offset": offset
     }
@@ -47,7 +48,7 @@ while True:
         break
 
     all_data.extend(data)
-    print(f"📦 Nuevos registros acumulados: {len(all_data)}")
+    print(f"📦 Descargados: {len(all_data)}")
 
     offset += limit
 
@@ -62,27 +63,61 @@ if os.path.exists(ARCHIVO):
     print("📂 Histórico cargado")
 else:
     df_hist = pd.DataFrame()
-    print("⚠️ No hay histórico, creando nuevo dataset")
+    print("⚠️ No hay histórico")
 
 # =====================================================
-# 🔹 4. UNIR DATOS
+# 🔹 4. DETECTAR NUEVOS
+# =====================================================
+
+if not df_hist.empty and "uid" in df_nuevo.columns:
+
+    nuevos = df_nuevo[~df_nuevo["uid"].isin(df_hist["uid"])]
+
+    print(f"\n🆕 CONTRATOS NUEVOS: {len(nuevos)}")
+
+else:
+    nuevos = df_nuevo.copy()
+    print(f"\n🆕 Todo es nuevo: {len(nuevos)}")
+
+# =====================================================
+# 🔹 5. DETECTAR ACTUALIZADOS
+# =====================================================
+
+actualizados = pd.DataFrame()
+
+if not df_hist.empty:
+
+    df_merge = df_nuevo.merge(
+        df_hist,
+        on="uid",
+        how="inner",
+        suffixes=("_nuevo", "_viejo")
+    )
+
+    mask_cambio = (
+        (df_merge["cuantia_contrato_nuevo"] != df_merge["cuantia_contrato_viejo"]) |
+        (df_merge["estado_del_proceso_nuevo"] != df_merge["estado_del_proceso_viejo"])
+    )
+
+    actualizados = df_merge[mask_cambio]
+
+    print(f"🔄 CONTRATOS ACTUALIZADOS: {len(actualizados)}")
+
+# =====================================================
+# 🔹 6. UNIR HISTÓRICO + NUEVO
 # =====================================================
 
 df_total = pd.concat([df_hist, df_nuevo], ignore_index=True)
 
-# =====================================================
-# 🔹 5. ELIMINAR DUPLICADOS (CLAVE)
-# =====================================================
-
-df_total = df_total.drop_duplicates(subset="uid")
+if "uid" in df_total.columns:
+    df_total = df_total.drop_duplicates(subset="uid", keep="last")
 
 # =====================================================
-# 🔹 6. FILTRO 3 MESES + CONVOCADO (SIN LIMPIEZA EXTRA)
+# 🔹 7. FILTRO 3 MESES + CONVOCADO (TU VERSIÓN)
 # =====================================================
 
 hace_3_meses = hoy - timedelta(days=90)
 
-# solo convertimos la fecha para poder filtrar (no es limpieza)
 fechas = pd.to_datetime(df_total["fecha_de_cargue_en_el_secop"], errors="coerce")
 
 df_total = df_total[
@@ -91,20 +126,25 @@ df_total = df_total[
 ]
 
 # =====================================================
-# 🔹 7. CREAR CARPETA SI NO EXISTE
+# 🔹 8. CREAR CARPETA
 # =====================================================
 
 os.makedirs("data", exist_ok=True)
 
 # =====================================================
-# 🔹 8. GUARDAR
+# 🔹 9. GUARDAR
 # =====================================================
 
 df_total.to_parquet(ARCHIVO, engine="pyarrow")
 
+nuevos.to_parquet("data/nuevos.parquet", engine="pyarrow")
+actualizados.to_parquet("data/actualizados.parquet", engine="pyarrow")
+
 # =====================================================
-# 🔹 9. RESUMEN
+# 🔹 10. RESUMEN
 # =====================================================
 
-print("\n✅ DATASET ACTUALIZADO")
-print("📊 Filas finales:", df_total.shape[0])
+print("\n📊 RESUMEN FINAL")
+print("🆕 Nuevos:", len(nuevos))
+print("🔄 Actualizados:", len(actualizados))
+print("📦 Total dataset:", len(df_total))
