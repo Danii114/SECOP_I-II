@@ -2,7 +2,7 @@ name: SECOP I-II
 
 on:
   schedule:
-    - cron: '0 7 * * 1'  # lunes
+    - cron: '0 8 * * *'
   workflow_dispatch:
 
 permissions:
