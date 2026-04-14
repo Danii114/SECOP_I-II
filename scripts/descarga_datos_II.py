@@ -156,17 +156,6 @@ else:
 df_total = pd.concat([df_base, df_api], ignore_index=True)
 df_total["fecha_de_publicacion"] = pd.to_datetime(df_total["fecha_de_publicacion"], errors="coerce")
  
-# ── 5. Limpiar inactivos viejos (> DIAS_MAX) ──────────────────────────────────
-fecha_corte = pd.Timestamp(date.today() - timedelta(days=DIAS_MAX))
- 
-if COL_ESTADO in df_total.columns:
-    mask_inactivo = df_total[COL_ESTADO].fillna("").str.lower().str.strip().isin(ESTADOS_INACTIVOS)
-    mask_viejo    = df_total["fecha_de_publicacion"] < fecha_corte
-    antes = len(df_total)
-    df_total = df_total[~(mask_inactivo & mask_viejo)]
-    print()
-    print(f"🧹 Eliminados (inactivos + >{DIAS_MAX}d) : {antes - len(df_total):,}")
- 
 # ── 6. Guardar ────────────────────────────────────────────────────────────────
 df_total.to_parquet(ARCHIVO, index=False, engine="pyarrow")
 print()
