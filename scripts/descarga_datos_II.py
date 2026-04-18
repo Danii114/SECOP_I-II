@@ -3,7 +3,7 @@ import requests
 import os
 from datetime import date, timedelta
  
-URL      = "https://www.datos.gov.co/resource/p6dx-8zbt.json"
+URL      = "https://www.datos.gov.co/resource/jbjy-vk9h.json"
 ARCHIVO  = "data/secop2.parquet"
 LIMIT    = 1000
 DIAS_MAX = 90
