@@ -3,7 +3,7 @@ import requests
 import os
 from datetime import date, timedelta
  
-URL      = "https://www.datos.gov.co/resource/jbjy-vk9h.json"
+URL      = "https://www.datos.gov.co/resource/p6dx-8zbt.json"
 ARCHIVO  = "data/secop2.parquet"
 LIMIT    = 1000
 DIAS_MAX = 90
@@ -155,6 +155,7 @@ else:
 # ── 4. Combinar ───────────────────────────────────────────────────────────────
 df_total = pd.concat([df_base, df_api], ignore_index=True)
 df_total["fecha_de_publicacion"] = pd.to_datetime(df_total["fecha_de_publicacion"], errors="coerce")
+ 
  
 # ── 6. Guardar ────────────────────────────────────────────────────────────────
 df_total.to_parquet(ARCHIVO, index=False, engine="pyarrow")
