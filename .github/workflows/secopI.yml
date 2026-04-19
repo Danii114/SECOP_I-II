@@ -2,8 +2,8 @@ name: SECOP Automatización
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # ⏰ Todos los días 7:00 AM Colombia (UTC-5)
-  workflow_dispatch:       # ▶️ Ejecutar manualmente
+    - cron: "0 12 * * *"   
+  workflow_dispatch:       
 
 jobs:
   run-script:
