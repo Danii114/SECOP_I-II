@@ -31,7 +31,7 @@ COLUMNAS = [
 NOMBRE_ARCHIVO = f"secop_construccion_{date.today()}.xlsx"
 
 # =========================================================
-Cargando datos
+# Cargando datos
 # =========================================================
 
 print("🔄 Cargando modelo y datos...")
@@ -44,7 +44,7 @@ df = pd.read_parquet(
 )
 
 # =========================================================
- FUNCIÓN DE BÚSQUEDA
+# FUNCIÓN DE BÚSQUEDA
 # =========================================================
 
 def buscar_secop(query, top_k=15):
@@ -62,7 +62,7 @@ def buscar_secop(query, top_k=15):
     return resultado
 
 # =========================================================
- EJECUTAR BÚSQUEDA
+# EJECUTAR BÚSQUEDA
 # =========================================================
 
 print("🔎 Buscando contratos...")
@@ -74,7 +74,7 @@ todo = pd.concat(resultados, ignore_index=True)
 todo = todo.drop_duplicates(subset=["ruta_proceso_en_secop_i"])
 
 # =========================================================
- LIMPIEZA
+# LIMPIEZA
 # =========================================================
 
 print("🧹 Limpiando datos...")
@@ -88,7 +88,7 @@ todo["cuantia_proceso"] = pd.to_numeric(
 todo = todo.sort_values(by="score", ascending=False)
 
 # =========================================================
-# 🔹 6. EXPORTAR EXCEL
+#  EXPORTAR EXCEL
 # =========================================================
 
 print("📁 Generando Excel...")
@@ -105,7 +105,7 @@ excel_df.to_excel(NOMBRE_ARCHIVO, index=False)
 print(f"✅ Excel guardado: {NOMBRE_ARCHIVO}")
 
 # =========================================================
- ENVIAR CORREO
+# ENVIAR CORREO
 # =========================================================
 
 print("📧 Enviando correo...")
