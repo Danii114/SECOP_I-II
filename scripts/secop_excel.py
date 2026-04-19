@@ -37,11 +37,37 @@ NOMBRE_ARCHIVO = f"secop_construccion_{date.today()}.xlsx"
 print("🔄 Cargando modelo y datos...")
 
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-embeddings = np.load("data/embeddings.npy")
 
-df = pd.read_parquet(
-    "https://raw.githubusercontent.com/Danii114/SECOP_I-II/main/data/secop_2026-04.parquet"
-)
+df = pd.read_parquet("https://raw.githubusercontent.com/Danii114/SECOP_I-II/main/data/secop_2026-04.parquet")
+
+# =========================================================
+# 🔥 GENERAR O CARGAR EMBEDDINGS
+# =========================================================
+
+columna_texto = "detalle_del_objeto_a_contratar"
+
+if columna_texto not in df.columns:
+    raise ValueError(f"No existe la columna: {columna_texto}")
+
+if os.path.exists("data/embeddings.npy"):
+    print("📦 Cargando embeddings guardados...")
+    embeddings = np.load("data/embeddings.npy")
+
+else:
+    print("⚠️ Generando embeddings...")
+
+    textos = df[columna_texto].fillna("").astype(str).tolist()
+
+    embeddings = model.encode(
+        textos,
+        batch_size=32,
+        show_progress_bar=True
+    )
+
+    os.makedirs("data", exist_ok=True)
+    np.save("data/embeddings.npy", embeddings)
+
+    print("✅ Embeddings guardados")
 
 # =========================================================
 # FUNCIÓN DE BÚSQUEDA
