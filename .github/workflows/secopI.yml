@@ -31,5 +31,4 @@ jobs:
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        run: |
-          run: python scripts/secop_excel.py
+        run: python scripts/secop_excel.py
