@@ -1,9 +1,9 @@
-name: SECOP EXCEL Automatización
+name: SECOP EXCEL 
 
 on:
   schedule:
-    - cron: "0 12 * * *"   
-  workflow_dispatch:       
+    - cron: "0 12 * * *"   # 7 AM Colombia aprox
+  workflow_dispatch:
 
 jobs:
   run-script:
@@ -31,4 +31,5 @@ jobs:
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python scripts/secop_excel.py
