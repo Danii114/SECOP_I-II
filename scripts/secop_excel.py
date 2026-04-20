@@ -136,7 +136,7 @@ print(f"✅ Excel guardado: {NOMBRE_ARCHIVO}")
 
 print("📧 Enviando correo...")
 
-EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "danimorav05@gmail.com")
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "danimorav05@gmail.com,cjob.9410@gmail.com")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "exum hoyz gcvy nsli")
 EMAIL_TO = [EMAIL_SENDER]
 
