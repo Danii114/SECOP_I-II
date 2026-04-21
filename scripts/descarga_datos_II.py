@@ -1,165 +1,227 @@
 import pandas as pd
 import requests
+import logging
+import shutil
 import os
 from datetime import date, timedelta
- 
-URL      = "https://www.datos.gov.co/resource/p6dx-8zbt.json"
-ARCHIVO  = "data/secop2.parquet"
-LIMIT    = 1000
-DIAS_MAX = 90
- 
-ESTADOS_INACTIVOS = {"terminado", "liquidado", "cancelado", "cerrado", "no vigente"}
- 
-ID_COL       = "id_del_proceso"
-COL_VALOR    = "valor_del_contrato"
-COL_ESTADO   = "estado_del_procedimiento"
-COL_URL      = "urlproceso"
- 
-os.makedirs("data", exist_ok=True)
- 
-if not os.path.exists(ARCHIVO):
-    print(f"No existe {ARCHIVO}. Se necesita descarga inicial.")
-    raise SystemExit(1)
- 
-# ── 1. Cargar local ───────────────────────────────────────────────────────────
-df_local = pd.read_parquet(ARCHIVO)
-df_local["fecha_de_publicacion"] = pd.to_datetime(df_local["fecha_de_publicacion"], errors="coerce")
- 
-# CORRECCIÓN: usar date.today() como tope para nunca quedar atascado
-# en un día sin datos. Buscamos desde la última fecha conocida (inclusive).
-hoy            = date.today()
-ultima_local   = df_local["fecha_de_publicacion"].dt.date.max()
-fecha_desde    = ultima_local.strftime("%Y-%m-%d")
- 
-print("=" * 60)
-print(f"📂 Registros locales  : {len(df_local):,}")
-print(f"   Última fecha local : {ultima_local}")
-print(f"   Hoy                : {hoy}")
-print(f"   Buscando desde     : {fecha_desde}")
-print("=" * 60)
- 
-# ── 2. Descargar desde API ────────────────────────────────────────────────────
-offset, data_nuevos = 0, []
+
+
+# ─────────────────────────────────────────────
+#  CONFIGURACIÓN
+# ─────────────────────────────────────────────
+URL            = 'https://www.datos.gov.co/resource/jbjy-vk9h.json'
+ARCHIVO        = '/data/secop2.parquet'
+VENTANA_DIAS   = 15
+LIMIT          = 1000
+
+COLS_FECHA = [
+    'fecha_de_firma',
+    'fecha_de_inicio_del_contrato',
+    'fecha_de_fin_del_contrato',
+    'ultima_actualizacion',
+    'fecha_inicio_liquidacion',
+    'fecha_fin_liquidacion',
+    'fecha_de_notificaci_n_de_prorrogaci_n',
+]
+
+# ─────────────────────────────────────────────
+#  LOGGING
+# ─────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+log = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────
+#  HELPER: variables de tiempo
+# ─────────────────────────────────────────────
+def agregar_variables_tiempo(df: pd.DataFrame) -> pd.DataFrame:
+    for col in COLS_FECHA:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    if 'fecha_de_inicio_del_contrato' in df.columns and 'fecha_de_fin_del_contrato' in df.columns:
+        df['duracion_dias'] = (
+            df['fecha_de_fin_del_contrato'] - df['fecha_de_inicio_del_contrato']
+        ).dt.days
+
+    if 'fecha_de_firma' in df.columns:
+        df['firma_anio']       = df['fecha_de_firma'].dt.year
+        df['firma_mes']        = df['fecha_de_firma'].dt.month
+        df['firma_dia_semana'] = df['fecha_de_firma'].dt.day_name()
+        df['firma_trimestre']  = df['fecha_de_firma'].dt.quarter
+
+    if 'ultima_actualizacion' in df.columns:
+        df['actualizacion_anio'] = df['ultima_actualizacion'].dt.year
+        df['actualizacion_mes']  = df['ultima_actualizacion'].dt.month
+
+    return df
+
+
+# ─────────────────────────────────────────────
+#  1. LEER ARCHIVO LOCAL
+# ─────────────────────────────────────────────
+hoy         = date.today()
+fecha_hoy   = hoy.strftime('%Y-%m-%d')
+fecha_corte = hoy - timedelta(days=VENTANA_DIAS)   # límite inferior de la ventana
+
+if os.path.exists(ARCHIVO):
+    log.info(f'Leyendo archivo existente: {ARCHIVO}')
+    df_local = pd.read_parquet(ARCHIVO)
+
+    if 'ultima_actualizacion' in df_local.columns:
+        df_local['ultima_actualizacion'] = pd.to_datetime(
+            df_local['ultima_actualizacion'], errors='coerce'
+        )
+        ultima_fecha = df_local['ultima_actualizacion'].dt.date.max()
+    else:
+        ultima_fecha = None
+
+    # Desde el día siguiente a lo que ya tenemos, pero nunca antes de la ventana
+    if ultima_fecha:
+        fecha_desde = max(ultima_fecha + timedelta(days=1), fecha_corte)
+    else:
+        fecha_desde = fecha_corte
+
+    log.info(f'Última fecha en archivo: {ultima_fecha} → descarga desde: {fecha_desde} hasta: {fecha_hoy}')
+else:
+    log.warning(f'No existe {ARCHIVO}. Primera carga: últimos {VENTANA_DIAS} días ({fecha_corte} → {fecha_hoy})')
+    fecha_desde = fecha_corte
+    df_local    = pd.DataFrame()
+
+fecha_desde_str = fecha_desde.strftime('%Y-%m-%d') if isinstance(fecha_desde, date) else str(fecha_desde)
+
+
+# ─────────────────────────────────────────────
+#  2. DESCARGAR — con tope superior = hoy
+# ─────────────────────────────────────────────
+log.info(f'Descargando registros con ultima_actualizacion entre {fecha_desde_str} y {fecha_hoy}...')
+data_nuevos = []
+offset = 0
+
+# El WHERE tiene tope superior explícito para evitar bajar registros con fechas raras
+where = (
+    f"ultima_actualizacion >= '{fecha_desde_str}T00:00:00' "
+    f"AND ultima_actualizacion <= '{fecha_hoy}T23:59:59'"
+)
+
 while True:
+    params = {
+        '$offset': offset,
+        '$limit' : LIMIT,
+        '$where' : where,
+    }
+
     try:
-        resp = requests.get(URL, params={
-            "$offset": offset,
-            "$limit":  LIMIT,
-            "$where":  f"fecha_de_publicacion >= '{fecha_desde}'"
-        }, timeout=60)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        print(f"❌ Error API: {e}")
-        raise SystemExit(1)
- 
-    batch = resp.json()
+        response = requests.get(URL, params=params, timeout=30)
+    except requests.exceptions.RequestException as e:
+        log.error(f'Error de conexión: {e}')
+        raise
+
+    if response.status_code != 200:
+        log.error(f'HTTP {response.status_code}: {response.text}')
+        raise Exception(f'Falló la descarga con código {response.status_code}')
+
+    batch = response.json()
     if not batch:
         break
+
     data_nuevos.extend(batch)
-    print(f"   Descargando... {len(data_nuevos):,} filas", end="\r")
+    log.info(f'  {len(data_nuevos):,} filas descargadas...')
     offset += LIMIT
- 
-print()
- 
+
+
+# ─────────────────────────────────────────────
+#  3. COMBINAR: solo nuevos + cambios de estado
+# ─────────────────────────────────────────────
 if not data_nuevos:
-    print("✅ Sin datos nuevos. El archivo está al día.")
-    raise SystemExit(0)
- 
-print(f"📥 {len(data_nuevos):,} registros descargados desde la API")
- 
-df_api = pd.DataFrame(data_nuevos)
-df_api["fecha_de_publicacion"] = pd.to_datetime(df_api["fecha_de_publicacion"], errors="coerce")
- 
-# ── 3. Clasificar: nuevos vs actualizados ─────────────────────────────────────
-print()
-print("=" * 60)
-print("🔍 ANÁLISIS DE CAMBIOS")
-print("=" * 60)
- 
-if ID_COL not in df_local.columns or ID_COL not in df_api.columns:
-    print(f"⚠️  No se encontró '{ID_COL}'. Concatenando sin análisis.")
-    df_base = df_local
+    log.info('No hay nuevos datos. El archivo está al día ✅')
+    df_completo = df_local
 else:
-    ids_locales = set(df_local[ID_COL].dropna())
-    ids_api     = set(df_api[ID_COL].dropna())
- 
-    ids_nuevos      = ids_api - ids_locales
-    ids_actualizados = ids_api & ids_locales
- 
-    print(f"🆕 Contratos NUEVOS       : {len(ids_nuevos):,}")
-    print(f"🔄 Contratos en SECOP API : {len(ids_actualizados):,} (ya existían localmente)")
- 
-    # ── Detectar cambios de valor y estado ───────────────────────────────────
-    cambios_valor  = []
-    cambios_estado = []
- 
-    if ids_actualizados:
-        df_local_idx = df_local[df_local[ID_COL].isin(ids_actualizados)].set_index(ID_COL)
-        df_api_idx   = df_api[df_api[ID_COL].isin(ids_actualizados)].set_index(ID_COL)
- 
-        # Manejar duplicados en el índice tomando el primero
-        df_local_idx = df_local_idx[~df_local_idx.index.duplicated(keep="first")]
-        df_api_idx   = df_api_idx[~df_api_idx.index.duplicated(keep="last")]
- 
-        ids_comunes = set(df_local_idx.index) & set(df_api_idx.index)
- 
-        for pid in ids_comunes:
-            url = df_api_idx.loc[pid, COL_URL] if COL_URL in df_api_idx.columns else "—"
- 
-            # Cambio de VALOR
-            if COL_VALOR in df_local_idx.columns and COL_VALOR in df_api_idx.columns:
-                v_old = str(df_local_idx.loc[pid, COL_VALOR]).strip()
-                v_new = str(df_api_idx.loc[pid, COL_VALOR]).strip()
-                if v_old != v_new:
-                    cambios_valor.append({
-                        "id_del_proceso":        pid,
-                        "valor_anterior":        v_old,
-                        "valor_nuevo":           v_new,
-                        "urlproceso":            url,
-                    })
- 
-            # Cambio de ESTADO
-            if COL_ESTADO in df_local_idx.columns and COL_ESTADO in df_api_idx.columns:
-                e_old = str(df_local_idx.loc[pid, COL_ESTADO]).strip()
-                e_new = str(df_api_idx.loc[pid, COL_ESTADO]).strip()
-                if e_old != e_new:
-                    cambios_estado.append({
-                        "id_del_proceso":        pid,
-                        "estado_anterior":       e_old,
-                        "estado_nuevo":          e_new,
-                        "urlproceso":            url,
-                    })
- 
-    # ── Reporte de cambios ────────────────────────────────────────────────────
-    print()
-    print(f"💰 Contratos con cambio de VALOR  : {len(cambios_valor):,}")
-    if cambios_valor:
-        df_cv = pd.DataFrame(cambios_valor)
-        print(df_cv.to_string(index=False))
- 
-    print()
-    print(f"📋 Contratos con cambio de ESTADO : {len(cambios_estado):,}")
-    if cambios_estado:
-        df_ce = pd.DataFrame(cambios_estado)
-        print(df_ce.to_string(index=False))
- 
-    if cambios_valor or cambios_estado:
-        print()
-        print("⚠️  ATENCIÓN: Contratos con modificaciones detectadas.")
-        print("   Revisar manualmente si corresponde a correcciones legítimas")
-        print("   o posibles indicios de irregularidades.")
- 
-    # Quitar versiones viejas de actualizados y reemplazar con los de la API
-    df_base = df_local[~df_local[ID_COL].isin(ids_actualizados)]
- 
-# ── 4. Combinar ───────────────────────────────────────────────────────────────
-df_total = pd.concat([df_base, df_api], ignore_index=True)
-df_total["fecha_de_publicacion"] = pd.to_datetime(df_total["fecha_de_publicacion"], errors="coerce")
- 
- 
-# ── 6. Guardar ────────────────────────────────────────────────────────────────
-df_total.to_parquet(ARCHIVO, index=False, engine="pyarrow")
-print()
-print("=" * 60)
-print(f"✅ SECOP 2 guardado: {len(df_total):,} registros → {ARCHIVO}")
-print("=" * 60)
+    df_nuevos = pd.DataFrame(data_nuevos)
+    log.info(f'Registros recibidos de la API: {len(df_nuevos):,}')
+
+    if df_local.empty:
+        df_completo = df_nuevos
+        log.info('Primera carga completa.')
+    else:
+        # Detectar cambios de estado
+        estados_locales = (
+            df_local[['id_contrato', 'estado_contrato']]
+            .dropna(subset=['id_contrato'])
+            .drop_duplicates(subset=['id_contrato'], keep='last')
+            .set_index('id_contrato')['estado_contrato']
+        )
+
+        cambios = []
+        for _, row in df_nuevos.iterrows():
+            id_c   = row.get('id_contrato')
+            estado = row.get('estado_contrato')
+            if id_c and id_c in estados_locales.index:
+                ant = estados_locales[id_c]
+                if ant != estado:
+                    cambios.append({'id_contrato': id_c, 'anterior': ant, 'nuevo': estado})
+
+        if cambios:
+            log.warning(f'⚠️  {len(cambios)} cambio(s) de estado detectado(s):')
+            for c in cambios:
+                log.warning(f'   {c["id_contrato"]} | {c["anterior"]} → {c["nuevo"]}')
+        else:
+            log.info('Sin cambios de estado.')
+
+        # Solo agregar lo que es nuevo o cambió
+        ids_locales    = set(df_local['id_contrato'].dropna().unique())
+        ids_con_cambio = {c['id_contrato'] for c in cambios}
+
+        df_a_agregar = df_nuevos[
+            df_nuevos['id_contrato'].apply(
+                lambda x: (x not in ids_locales) or (x in ids_con_cambio)
+            )
+        ]
+        omitidos = len(df_nuevos) - len(df_a_agregar)
+        log.info(f'Omitidos (ya existían, sin cambios): {omitidos:,} | A agregar: {len(df_a_agregar):,}')
+
+        df_completo = pd.concat([df_local, df_a_agregar], ignore_index=True)
+
+
+# ─────────────────────────────────────────────
+#  4. RECORTAR A VENTANA DE 3 MESES
+# ─────────────────────────────────────────────
+corte_ts = pd.Timestamp(fecha_corte)
+if 'ultima_actualizacion' in df_completo.columns:
+    df_completo['ultima_actualizacion'] = pd.to_datetime(
+        df_completo['ultima_actualizacion'], errors='coerce'
+    )
+    antes = len(df_completo)
+    df_completo = df_completo[
+        df_completo['ultima_actualizacion'].isna() |
+        (df_completo['ultima_actualizacion'] >= corte_ts)
+    ]
+    if (antes - len(df_completo)) > 0:
+        log.info(f'Registros descartados por ventana de {VENTANA_DIAS} días: {antes - len(df_completo):,}')
+
+
+# ─────────────────────────────────────────────
+#  5. VARIABLES DE TIEMPO
+# ─────────────────────────────────────────────
+df_completo = agregar_variables_tiempo(df_completo)
+
+
+# ─────────────────────────────────────────────
+#  6. GUARDADO ATÓMICO
+# ─────────────────────────────────────────────
+archivo_tmp = ARCHIVO + '.tmp'
+try:
+    df_completo.to_parquet(archivo_tmp, index=False, engine='pyarrow')
+    shutil.move(archivo_tmp, ARCHIVO)
+    log.info(f'Guardado ✅ | {len(df_completo):,} registros | {df_completo.shape[1]} columnas')
+except Exception as e:
+    log.error(f'Error guardando: {e}')
+    if os.path.exists(archivo_tmp):
+        os.remove(archivo_tmp)
+    raise
+
+log.info('Proceso finalizado ✅')
