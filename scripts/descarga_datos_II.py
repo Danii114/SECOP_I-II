@@ -11,7 +11,7 @@ from datetime import date, timedelta
 #  CONFIGURACIÓN
 # ─────────────────────────────────────────────
 URL            = 'https://www.datos.gov.co/resource/jbjy-vk9h.json'
-ARCHIVO        = 'secop.parquet'
+ARCHIVO        = 'data/secop.parquet'
 VENTANA_DIAS   = 15
 LIMIT          = 1000
 
