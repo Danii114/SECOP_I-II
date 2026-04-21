@@ -3,6 +3,7 @@ import requests
 import logging
 import shutil
 import os
+import time
 from datetime import date, timedelta
 
 
@@ -10,7 +11,7 @@ from datetime import date, timedelta
 #  CONFIGURACIÓN
 # ─────────────────────────────────────────────
 URL            = 'https://www.datos.gov.co/resource/jbjy-vk9h.json'
-ARCHIVO        = '/data/secop2.parquet'
+ARCHIVO        = 'secop.parquet'
 VENTANA_DIAS   = 15
 LIMIT          = 1000
 
@@ -108,6 +109,9 @@ where = (
     f"AND ultima_actualizacion <= '{fecha_hoy}T23:59:59'"
 )
 
+MAX_REINTENTOS = 3
+TIMEOUT        = 60   # segundos — la API de datos.gov.co puede ser lenta
+
 while True:
     params = {
         '$offset': offset,
@@ -115,17 +119,22 @@ while True:
         '$where' : where,
     }
 
-    try:
-        response = requests.get(URL, params=params, timeout=30)
-    except requests.exceptions.RequestException as e:
-        log.error(f'Error de conexión: {e}')
-        raise
+    batch = None
+    for intento in range(1, MAX_REINTENTOS + 1):
+        try:
+            response = requests.get(URL, params=params, timeout=TIMEOUT)
+            if response.status_code != 200:
+                log.error(f'HTTP {response.status_code}: {response.text}')
+                raise Exception(f'Falló la descarga con código {response.status_code}')
+            batch = response.json()
+            break  # éxito, salir del loop de reintentos
+        except requests.exceptions.RequestException as e:
+            log.warning(f'Intento {intento}/{MAX_REINTENTOS} fallido (offset {offset:,}): {e}')
+            if intento == MAX_REINTENTOS:
+                log.error('Se agotaron los reintentos. Abortando.')
+                raise
+            time.sleep(5 * intento)  # espera 5s, 10s, 15s entre reintentos
 
-    if response.status_code != 200:
-        log.error(f'HTTP {response.status_code}: {response.text}')
-        raise Exception(f'Falló la descarga con código {response.status_code}')
-
-    batch = response.json()
     if not batch:
         break
 
