@@ -27,6 +27,7 @@ jobs:
       - name: 📦 Instalar dependencias
         run: |
           pip install pandas requests pyarrow
+          pip install sentence-transformers numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
 
       # 🔵 4. SECOP I (TUYO)
       - name: 🔵 Actualizar SECOP I
