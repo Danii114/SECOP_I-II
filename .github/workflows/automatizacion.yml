@@ -36,8 +36,12 @@ jobs:
       # 🟢 5. SECOP II (COMPAÑERO)
       - name: 🟢 Actualizar SECOP II
         run: python scripts/descarga_datos_II.py
-      - name: Generar embeddings
+
+      # 6. EMBEDDINGS
+      - name: Generar embeddings secop_II
         run: python scripts/generar_embeddings.py
+      - name: Generar embeddings secop_I
+        run: python scripts/generar_embeddings1.py
 
       # 6. Subir cambios
       - name: 💾 Guardar cambios
