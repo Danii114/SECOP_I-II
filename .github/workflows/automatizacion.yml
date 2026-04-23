@@ -29,7 +29,7 @@ jobs:
           pip install pandas requests pyarrow
           pip install sentence-transformers numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
 
-      # 🔵 4. SECOP I (TUYO)
+      # 🔵 4. SECOP I 
       - name: 🔵 Actualizar SECOP I
         run: python scripts/descarga_datos.py
 
@@ -41,7 +41,7 @@ jobs:
       - name: Generar embeddings secop_II
         run: python scripts/generar_embeddings.py
       - name: Generar embeddings secop_I
-        run: python scripts/generar_embeddings1.py
+        run: python scripts/generar_embeddingsIII.py
 
       # 6. Subir cambios
       - name: 💾 Guardar cambios
