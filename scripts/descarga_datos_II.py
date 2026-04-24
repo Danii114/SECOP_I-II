@@ -12,7 +12,7 @@ from datetime import date, timedelta
 # ─────────────────────────────────────────────
 URL            = 'https://www.datos.gov.co/resource/jbjy-vk9h.json'
 ARCHIVO        = 'data/secop2.parquet'
-VENTANA_DIAS   = 35
+VENTANA_DIAS   = 90
 LIMIT          = 1000
 
 COLS_FECHA = [
