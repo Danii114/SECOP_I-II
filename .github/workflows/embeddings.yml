@@ -1,0 +1,47 @@
+name: EMBEDDINGS I II
+
+on:
+  schedule:
+    - cron: '30 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar-secops:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clonar repo
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      # 2. Python
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # 3. Librerías
+      - name: 📦 Instalar dependencias
+        run: |
+          pip install pandas requests pyarrow
+          pip install sentence-transformers numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Generar embeddings secop_II
+        run: python scripts/generar_embeddings.py
+      - name: Generar embeddings secop_I
+        run: python scripts/generar_embeddingsIII.py
+
+      # 6. Subir cambios
+      - name: 💾 Guardar cambios
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          
+          git add .
+          git diff --staged --quiet && echo "Sin cambios" && exit 0
+          
+          git commit -m "🔄 Actualización Embedding"
+          git push
