@@ -2,7 +2,7 @@ name: SECOP I-II
 
 on:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 10 * * *'
   workflow_dispatch:
 
 permissions:
@@ -27,7 +27,6 @@ jobs:
       - name: 📦 Instalar dependencias
         run: |
           pip install pandas requests pyarrow
-          pip install sentence-transformers numpy torch --extra-index-url https://download.pytorch.org/whl/cpu
 
       # 🔵 4. SECOP I 
       - name: 🔵 Actualizar SECOP I
@@ -36,12 +35,6 @@ jobs:
       # 🟢 5. SECOP II (COMPAÑERO)
       - name: 🟢 Actualizar SECOP II
         run: python scripts/descarga_datos_II.py
-
-      # 6. EMBEDDINGS
-      - name: Generar embeddings secop_II
-        run: python scripts/generar_embeddings.py
-      - name: Generar embeddings secop_I
-        run: python scripts/generar_embeddingsIII.py
 
       # 6. Subir cambios
       - name: 💾 Guardar cambios
