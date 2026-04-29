@@ -161,7 +161,7 @@ df_total = pd.concat([df_base, df_api], ignore_index=True)
 # =====================================================
 
 hoy = datetime.today()
-hace_3_meses = hoy - timedelta(days=90)
+hace_3_meses = hoy - timedelta(days=30)
 
 fechas = pd.to_datetime(df_total["fecha_de_cargue_en_el_secop"], errors="coerce")
 
