@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 # =====================================================
 
 URL = "https://www.datos.gov.co/resource/f789-7hwg.json"
-ARCHIVO = "data/secop.parquet"
-LIMIT = 50000
+ARCHIVO = "data/secop_2026-04.parquet"
+LIMIT = 500000
 
 ID_COL = "uid"
 COL_VALOR = "cuantia_contrato"
